@@ -13,11 +13,10 @@ void batch_mode(const char *filename);
 void interactive_mode();
 int parse_and_exec();
 
-
 int main(int argc, char *argv[]){
     if (argc == 2){
         //printf("Entering batch mode with file: %s\n", argv[1]);
-        batch_mode(argv[1]);
+        batch_mode(argv[1]); //file or path etc 
     } else if (isatty(STDIN_FILENO)){
         //printf("Entering interactive mode\n");
         interactive_mode();
