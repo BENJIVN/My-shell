@@ -38,10 +38,13 @@ void batch_mode(const char *filename){
         perror("file opening error");
         exit(EXIT_FAILURE);
     }
-    while(){
-        
+    while(fgets(command, MAX_LENGTH, file) != NULL){
+        command[strcspn(command, "\n")] = '\0'; //remove newline characters
+        status = parse_and_exec(command, status); //execute the command
     }
+    fclose(file);
 }
+
 void interactive_mode(){
     //printf("Interactive mode not fully implemented yet.\n");
     char command[MAX_LENTH];
