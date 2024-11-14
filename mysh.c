@@ -5,6 +5,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <glob.h>
+#include <sys/stat.h>
 
 #define MAX_ARGS 1024
 #define MAX_LENGTH 2048
@@ -76,15 +77,6 @@ void interactive_mode(){
             write(STDOUT_FILENO, "mysh: exiting\n", 14);
             break;
         }
-        if (strcmp(command, "cd") == 0){
-            printf("%s\n", chdir());
-        }
-        if (strcmp(command, "pwd") == 0){
-            printf("%s\n", getcwd(command, MAX_LENGTH));
-        }
-        if(strcmp(command, "which") == 0){
-
-        }
         //fat fingering enter
         if (strcmp(command, "") == 0){
             continue;
@@ -95,5 +87,85 @@ void interactive_mode(){
 
 int parse_and_exec(char *command, int status){
     //printf("Executing command: %s with status: %d\n", command, status);
-    return 0;
+    char *cmd = strtok(command, " ");
+    char *arg1, *arg2;
+    arg1 = strtok(NULL, " ");
+    arg2 = strtok(NULL, " "); //checking for additional argument
+
+    //exit command handler
+    if (strcmp(command, "exit") == 0){
+        write(STDOUT_FILENO, "mysh: exiting\n", 14);
+        exit(0);
+    }
+
+    //cd command handler
+    if (strcmp(command, "cd") == 0){
+        //error checks
+        if (arg1 == NULL){
+            fprintf(stderr, "cd: expects one arguemnt\n");
+            return -1;
+        } else if (arg2 != NULL){
+            fprintf(stderr, "cd: too many arguments\n");
+            return -1;
+        }
+
+        //directory change
+        if(chdir(arg1) != 0){
+            perror("cd error");
+            return -1;
+        }
+
+        return 0;
+    }
+
+    //pwd command handler
+    if (strcmp(command, "pwd") == 0){
+        //error check
+        if(arg1 != NULL){
+            fprintf(stderr, "pwd: too many arguments\n");
+            return -1;
+        }
+
+        //prints the current directory path
+        char cwd[MAX_LENGTH];
+        if(getcwd(cwd, sizeof(cwd)) != NULL){ //gets current directory path then stores it in cwd
+            printf("%s\n", cwd);
+        } else {
+            perror("pwd error");
+        }
+
+        return 0;
+    }
+
+    //which command handler
+    if(strcmp(command, "which") == 0){
+        if(arg1 == NULL || arg2 != NULL){
+            fprintf(stderr, "which: expects one argument\n");
+            return -1;
+        }
+
+        const char *pathSearchs[] = {"/usr/local/bin", "/usr/bin", "/bin"};
+        char path[MAX_LENGTH];
+        struct stat buffer;
+        int found = 0;
+
+        for(int i = 0; i < 3; i++){ //iterates through pathSearchs array
+            snprintf(path, sizeof(path), "%s/%s", pathSearchs[i], arg1); //gets full path then stores it in path
+            if(stat(path, &buffer) == 0 && (buffer.st_mode & S_IXUSR)){ //checks if file exists, if it does store in buffer and if user can execute the file (S_IXUSR)
+                printf("%s\n", path);
+                found = 1;
+                break;
+            }
+        }
+
+        if(!found){
+            fprintf(stderr, "which: %s not found\n", arg1);
+        }
+
+        //if found is 1, returns 0
+        //if found is 0, returns -1
+        return found ? 0 : -1; 
+
+    }
+    return status;
 }
