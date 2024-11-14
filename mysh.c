@@ -33,15 +33,18 @@ void batch_mode(const char *filename){
     int status = 0;
     char command [MAX_LENGTH];
 
-    FILE *file = fopen(filename, "r");
+    FILE *file = fopen(filename, "r"); //open the file in read mode 
     if(!file){
         perror("file opening error");
         exit(EXIT_FAILURE);
     }
-    while(){
-        
+    while(fgets(command, MAX_LENGTH, file) != NULL){
+        command[strcspn(command, "\n")] = '\0'; //remove newline characters and replace with \0
+        status = parse_and_exec(command, status); //execute the command
     }
+    fclose(file);
 }
+
 void interactive_mode(){
     //printf("Interactive mode not fully implemented yet.\n");
     char command[MAX_LENTH];
@@ -50,6 +53,12 @@ void interactive_mode(){
     printf("Welcome to my shell! \n");
     while(1){
         printf("mysh> ");
+        if(!fgets(command, MAX_LENGTH, stdin)){
+            break;
+        }
+        if(strcmp(command, "\n") == 0) {
+            continue
+        }
     }
 }
 
