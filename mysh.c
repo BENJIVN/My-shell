@@ -50,10 +50,10 @@ void interactive_mode(){
     int bytesRead = 0;
     int index = 0;
 
-    printf("Welcome to my shell! \n");
+     write(STDOUT_FILENO, "Welcome to my shell!\n", 21);
 
     while(1){
-        printf("mysh> ");
+    write(STDOUT_FILENO, "mysh> ", 6);
         index = 0;
          //printf("Waiting for input...\n");
         while ((bytesRead = read(STDIN_FILENO, &command[index], 1)) > 0){
@@ -63,16 +63,17 @@ void interactive_mode(){
             }
             index++;
             if (index >= MAX_LENGTH - 1){
-                fprintf(stderr, "Error: command is too long\n");
+                write(STDOUT_FILENO, "Error: command is too long\n", 27);
                 index = 0; //reset the index 
                 break;
             }
         }
         if (bytesRead <= 0){
+            write(STDOUT_FILENO, "\n", 1);
             break;
         }
         if (strcmp(command, "exit") == 0){
-            printf("exiting\n");
+            write(STDOUT_FILENO, "mysh: exiting\n", 14);
             break;
         }
         //fat fingering enter
@@ -84,7 +85,7 @@ void interactive_mode(){
 }
 
 int parse_and_exec(char *command, int status){
-    printf("Executing command: %s with status: %d\n", command, status);
+    //printf("Executing command: %s with status: %d\n", command, status);
     return 0;
 }
 
