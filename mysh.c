@@ -76,6 +76,15 @@ void interactive_mode(){
             write(STDOUT_FILENO, "mysh: exiting\n", 14);
             break;
         }
+        if (strcmp(command, "cd") == 0){
+            printf("%s\n", chdir());
+        }
+        if (strcmp(command, "pwd") == 0){
+            printf("%s\n", getcwd(command, MAX_LENGTH));
+        }
+        if(strcmp(command, "which") == 0){
+
+        }
         //fat fingering enter
         if (strcmp(command, "") == 0){
             continue;
@@ -88,4 +97,3 @@ int parse_and_exec(char *command, int status){
     //printf("Executing command: %s with status: %d\n", command, status);
     return 0;
 }
-
