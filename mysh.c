@@ -50,7 +50,7 @@ void interactive_mode(){
     int bytesRead = 0;
     int index = 0;
 
-     write(STDOUT_FILENO, "Welcome to my shell!\n", 21);
+    write(STDOUT_FILENO, "Welcome to my shell!\n", 21);
 
     while(1){
     write(STDOUT_FILENO, "mysh> ", 6);
