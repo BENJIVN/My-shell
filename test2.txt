@@ -1,0 +1,3 @@
+cat a.txt | ls 
+echo hello world | wc -w 
+ls - l | grep .txt

@@ -1,0 +1,5 @@
+cd
+cd subdir subsubdir
+cd folder
+cd mysh.c
+cd subdir
