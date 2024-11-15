@@ -1,8 +1,14 @@
 # TESTCASES: 
 
-## test1.txt
+## test1.txt 
 
-    Redirection --> test1.txt
+opens/creates an output.txt file and writes all the files in the current working directory into it. then outputs the number of lines that are now in output.txt. shell reads the contents of inputfile.txt and writes it to outputfile.txt
+
+```
+ls > output.txt
+wc - l < output.txt
+cat < inputfile.txt > outputfile.txt
+```
 
 ## test2.txt
 
