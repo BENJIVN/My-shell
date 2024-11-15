@@ -1,3 +1,8 @@
+# Authors: 
+Benjamin Nguyen: bvn6
+Victor Nguyen: vvn12 
+
+# TESTPLAN:
 # TESTCASES: 
 
 ## REDIRECTION: test1.txt 
