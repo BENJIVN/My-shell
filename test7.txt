@@ -1,0 +1,7 @@
+ls
+then cat a.txt
+then cat b.txt
+cd "dir that doesnt exist"
+else ls subdir
+cat c.txt | then grep asdf > cond_test.txt
+cat c.txt | else grep in > cond_test2.txt

@@ -1,0 +1,3 @@
+ls > output.txt
+wc -l < output.txt
+cat < inputfile.txt > outputfile.txt
