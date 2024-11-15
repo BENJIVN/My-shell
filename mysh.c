@@ -34,33 +34,54 @@ void redirection(command *cmd);
 int builtin_commands(char **tokens, int *status_flag);
 
 int main (int argc, char *argv[]){
-
     int interactive = isatty(STDIN_FILENO); //check stdin is connected to terminal 
+    char command[MAX_COMMAND_LENGTH];
+    ssize_t bytes_read;
     //isatty() returns 1 is true (shell is connected to the terminal)
-    if (argc == 1){
-        if (interactive){
-            write(STDERR_FILENO, "Welcome to my shell!\n",21);
-            char command[MAX_COMMAND_LENGTH];
-            ssize_t bytes_read;
+    if (argc == 1 && interactive){
+        write(STDERR_FILENO, "Welcome to my shell!\n",21);
 
-            while(interactive){
-                write(STDOUT_FILENO, "mysh> ", 6);
-                bytes_read = read(STDIN_FILENO, command, MAX_COMMAND_LENGTH-1);
-                if(bytes_read == -1){
-                    perror("read");
-                    exit(EXIT_FAILURE);
-                }
-                if(bytes_read == 0){
-                    break;
-                }
-                if (command[bytes_read - 1] == '\n'){
-                    command[bytes_read - 1] = '\0'; //null terminator at the end 
-                }
-
-                if (strlen(command) > 0){
-                    exec_command(command, &status);
-                }
+        while(interactive){
+            write(STDOUT_FILENO, "mysh> ", 6);
+            bytes_read = read(STDIN_FILENO, command, MAX_COMMAND_LENGTH-1);
+            if(bytes_read == -1){
+                perror("read");
+                exit(EXIT_FAILURE);
             }
+            if(bytes_read == 0){
+                break;
+            }
+            if (command[bytes_read - 1] == '\n'){
+                command[bytes_read - 1] = '\0'; //null terminator at the end 
+            }
+
+            if (strlen(command) > 0){
+                exec_command(command, &status);
+            }
+        }
+    } else if (argc == 1 && !interactive){  //batch mode with piped input (cat myscript.sh | ./mysh)
+        while ((bytes_read = read(STDIN_FILENO, command, MAX_COMMAND_LENGTH - 1)) > 0) {
+            command[bytes_read] = '\0';  
+            char *next_comm = command;
+
+            while (next_comm) {
+                char *newLine = strchr(next_comm, '\n');  
+                if (newLine) {
+                    *newLine = '\0';
+                }
+
+                if (strlen(next_comm) > 0) {
+                    exec_command(next_comm, &status);
+                }
+
+                //move to next line if not null, end loop if no new lines
+                next_comm = newLine ? newLine + 1 : NULL;
+            }
+        }
+
+        if (bytes_read == -1) { 
+            perror("read");
+            exit(EXIT_FAILURE);
         }
     } else if (argc > 1){
         int fd = open(argv[1], O_RDONLY);
@@ -234,7 +255,18 @@ void redirection(command *cmd) {
         perror("execv failed");
         exit(EXIT_FAILURE);
     } else if (pid > 0) { // Parent process
-        waitpid(pid, NULL, 0);
+        int wstatus;
+        waitpid(pid, &wstatus, 0);
+
+        //check status of child process
+        if (WIFEXITED(wstatus)) { //if child process is terminated
+            int exit_code = WEXITSTATUS(wstatus);
+            if (exit_code != 0) {
+                fprintf(stderr, "mysh: Command failed with code %d\n", exit_code);
+            }
+        } else if (WIFSIGNALED(wstatus)) {
+            fprintf(stderr, "mysh: Terminated by signal %d\n", WTERMSIG(wstatus));
+        }
     } else {
         perror("fork failed");
         exit(EXIT_FAILURE);
@@ -249,22 +281,20 @@ char *path_finder(const char *command){
         return NULL;
     }
 
-    char *path = strdup("PATH");
-    char *dir = strtok(path, ":");
-    char full_path[MAX_COMMAND_LENGTH];
-
-    while (dir != NULL){
-        snprintf(full_path, sizeof(full_path), "%s/%s", dir, command);
-        if (access(full_path, X_OK) == 0){
-            //fprintf(stderr, "Debug: Found command at: %s\n", full_path);
-            free(path);
-            return strdup(full_path); //return the path 
-        }
-        dir = strtok(NULL, ":");
+    if (strchr(command, '/')) {
+        if (access(command, X_OK) == 0) return strdup(command);
+        return NULL;
     }
-    //fprintf(stderr, "Debug: Command not found: %s\n", command);
-    free(path);
-    return NULL; //command not found 
+
+    const char *paths[] = {"/usr/local/bin", "/usr/bin", "/bin", NULL};
+    char full_path[MAX_COMMAND_LENGTH];
+    for (int i = 0; paths[i]; i++) {
+        snprintf(full_path, sizeof(full_path), "%s/%s", paths[i], command);
+        if (access(full_path, X_OK) == 0) {
+        return strdup(full_path);
+        }
+    }
+    return NULL;
 }
 
 int builtin_commands (char **tokens, int *status){
