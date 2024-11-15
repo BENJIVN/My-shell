@@ -1,6 +1,10 @@
-TESTCASES: 
+# TESTCASES: 
+
+## test1.txt
 
     Redirection --> test1.txt
+
+##test2.txt
 
     Piping --> test2.txt
     
