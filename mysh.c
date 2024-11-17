@@ -8,7 +8,7 @@
 #include <sys/stat.h>
 #include <ctype.h>
 
-#define MAX_ARGS 512
+#define MAX_ARGS 1024
 #define MAX_COMMAND_LENGTH 2048
 int status = 0;
 
@@ -31,8 +31,8 @@ char *path_finder(const char *command);
 //executor layer
 void execute_pipe_commands(char **first_command, char **second_command);
 void redirection(command *cmd);
-int builtin_commands(char **tokens, int *status_flag);
-
+int builtin_commands(char **tokens, int *status_flag, int free_tokens);
+void free_expanded_tokens(char **tokens);
 /*
 determine if the shell is running in batch or interactive mode 
 reads commands from stdin or a file in batch mode and executes them using exec_command
@@ -138,45 +138,52 @@ char **parse_command(char *command){
     char *next_token = command;
     char *end_token;
 
-    if (!tokens){
-        perror("memory allocation failed");
+    if (!tokens) {
+        perror("Memory allocation failed");
         exit(EXIT_FAILURE);
     }
 
-    while (*next_token != '\0'){
-        //skip whitespace 
+    while (*next_token != '\0') {
+        // Skip whitespace
         while (isspace(*next_token)) next_token++;
-            if(*next_token == '\0') break;
-        
-        //special tokens 
-        if (*next_token == '>' || *next_token == '<' || *next_token == '|' ){
-            tokens[token_count++] = strndup(next_token,1);
+        if (*next_token == '\0') break;
+
+        // Special tokens
+        if (*next_token == '>' || *next_token == '<' || *next_token == '|') {
+            if (token_count >= MAX_ARGS - 1) {  // Check bounds
+                fprintf(stderr, "Too many arguments\n");
+                free(tokens);
+                exit(EXIT_FAILURE);
+            }
+            tokens[token_count++] = strndup(next_token, 1);
+            //fprintf(stderr, "debug: allocated tokens: %s\n", tokens[token_count - 1]);
             next_token++;
         } else {
-            //parse nonspecial tokens 
+            // Parse non-special tokens
             end_token = next_token;
-            while (!isspace(*end_token) && *end_token != '\0' && *end_token != '>' && *end_token != '<' && *end_token != '|') end_token++;
-            tokens[token_count++] = strndup(next_token, end_token - next_token);
-            next_token = end_token;
-        }
+            while (!isspace(*end_token) && *end_token != '\0' && *end_token != '>' && *end_token != '<' && *end_token != '|')
+                end_token++;
 
-        if (token_count >= MAX_ARGS - 1){
-            fprintf(stderr, "too many arguments\n");
-            free(tokens);
-            exit(EXIT_FAILURE);
+            if (token_count >= MAX_ARGS - 1) { 
+                fprintf(stderr, "Too many arguments\n");
+                free(tokens);
+                exit(EXIT_FAILURE);
+            }
+            tokens[token_count++] = strndup(next_token, end_token - next_token);
+            //fprintf(stderr, "debug: allocated token: %s\n", tokens[token_count - 1]);
+            next_token = end_token;
         }
     }
 
     tokens[token_count] = NULL;
 
-    //debug tokens
-    // for (int i = 0; i < token_count; i++) {
-    //     fprintf(stderr, "parse_command Debug: Token %d: %s\n", i, tokens[i]);
-    // }
+    // fprintf(stderr, "debug: total tokens: %d\n", token_count);
 
     wildcard_expansion(&tokens, &token_count);
+
     return tokens;
 }
+
 
 /*
 expands tokens that have * 
@@ -190,39 +197,50 @@ void wildcard_expansion(char ***tokens, int *token_count) {
         perror("Failed to allocate memory for wildcard expansion");
         exit(EXIT_FAILURE);
     }
-
     int new_token_count = 0;
 
     for (int i = 0; i < *token_count; i++) {
         if (strchr((*tokens)[i], '*')) {
             glob_t glob_result;
             if (glob((*tokens)[i], 0, NULL, &glob_result) == 0) {
-                //fprintf(stderr, "Wildcard Expansion: %s ->", (*tokens)[i]);
                 for (size_t j = 0; j < glob_result.gl_pathc; j++) {
                     expanded_tokens[new_token_count++] = strdup(glob_result.gl_pathv[j]);
+                    if (!expanded_tokens[new_token_count - 1]) {
+                        perror("Memory allocation failed");
+                        exit(EXIT_FAILURE);
+                    }
                 }
-
-                //fprintf(stderr, "Wildcard Expansion: %s ->", (*tokens)[i]);
-                // for (size_t j = 0; j < glob_result.gl_pathc; j++) {
-                //     fprintf(stderr, " %s", glob_result.gl_pathv[j]);
-                // }
-
-                fprintf(stderr, "\n");
                 globfree(&glob_result);
             } else {
                 expanded_tokens[new_token_count++] = strdup((*tokens)[i]);
+                if (!expanded_tokens[new_token_count - 1]) {
+                    perror("Memory allocation failed");
+                    exit(EXIT_FAILURE);
+                }
             }
         } else {
             expanded_tokens[new_token_count++] = strdup((*tokens)[i]);
+            if (!expanded_tokens[new_token_count - 1]) {
+                perror("Memory allocation failed");
+                exit(EXIT_FAILURE);
+            }
         }
         free((*tokens)[i]);
     }
 
     free(*tokens);
-
     expanded_tokens[new_token_count] = NULL;
     *tokens = expanded_tokens;
     *token_count = new_token_count;
+}
+
+//helper function because of memory leaks 
+void free_expanded_tokens(char **tokens) {
+    for (int i = 0; tokens[i] != NULL; i++) {
+        //fprintf(stderr, "freeing token: %s\n", tokens[i]);
+        free(tokens[i]);
+    }
+    free(tokens);
 }
 
 /*
@@ -236,18 +254,22 @@ also remove the redirection from the arguments array
 void exec_command(char *input, int *status) {
     //we need to handle the pipe as well
     char *pipe = strchr(input, '|');
-    if (pipe){
+    if (pipe) {
         *pipe = '\0';
         char *first_comm = input;
         char *second_comm = pipe + 1;
 
-        execute_pipe_commands(parse_command(first_comm), parse_command(second_comm));
+        char **first_tokens = parse_command(first_comm);
+        char **second_tokens = parse_command(second_comm);
 
-        // for (int i = 0; first_tokens[i] != NULL; i++) free(first_tokens[i]);
-        // free(first_tokens);
+        execute_pipe_commands(first_tokens, second_tokens);
 
-        // for (int i = 0; second_tokens[i] != NULL; i++) free(second_tokens[i]);
-        // free(second_tokens);
+        //free the token after using them
+        for (int i = 0; first_tokens[i] != NULL; i++) free(first_tokens[i]);
+        free(first_tokens);
+
+        for (int i = 0; second_tokens[i] != NULL; i++) free(second_tokens[i]);
+        free(second_tokens);
 
         return;
     }
@@ -258,47 +280,40 @@ void exec_command(char *input, int *status) {
         return;
     }
 
-    if (builtin_commands(tokens, status)) {
-        for (int i = 0; tokens[i] != NULL; i++) free(tokens[i]);
-        free(tokens);
+    if (builtin_commands(tokens, status, 1)) {
+        free_expanded_tokens(tokens);
         return;
     }
 
     command cmd = { .arguments = tokens, .execpath = NULL, .inputfile = NULL, .outputfile = NULL };
 
     for (int i = 0; tokens[i] != NULL; i++) {
-    if (strcmp(tokens[i], "<") == 0 && tokens[i + 1] != NULL) {
-        cmd.inputfile = strdup(tokens[++i]);  
-        tokens[i - 1] = NULL;                
-    } else if (strcmp(tokens[i], ">") == 0 && tokens[i + 1] != NULL) {
-        cmd.outputfile = strdup(tokens[++i]);  
-        tokens[i - 1] = NULL;                  
-    } else if (cmd.execpath == NULL) {
-        cmd.execpath = path_finder(tokens[0]);
+        if (strcmp(tokens[i], "<") == 0 && tokens[i + 1] != NULL) {
+            cmd.inputfile = strdup(tokens[++i]);  
+            tokens[i - 1] = NULL;                
+        } else if (strcmp(tokens[i], ">") == 0 && tokens[i + 1] != NULL) {
+            cmd.outputfile = strdup(tokens[++i]);  
+            tokens[i - 1] = NULL;                  
+        } else if (cmd.execpath == NULL) {
+            cmd.execpath = path_finder(tokens[0]);
+        }
     }
-}
 
-    if (!cmd.execpath) {
+    if (cmd.execpath) {
+        redirection(&cmd);
+    } else {
         fprintf(stderr, "Command not found: %s\n", tokens[0]);
         *status = 1;
-        for (int i = 0; tokens[i] != NULL; i++) free(tokens[i]);
-        free(tokens);
-        return;
-    } else {
-        redirection(&cmd);
     }
-    
+
     //redirection(&cmd);
     
     free(cmd.execpath);
     free(cmd.inputfile);
     free(cmd.outputfile);
 
-    for (int i = 0; tokens[i] != NULL; i++) {
-        free(tokens[i]);
-    }
+    free_expanded_tokens(tokens);
 
-    free(tokens);
 }
 
 /*
@@ -396,10 +411,12 @@ char *path_finder(const char *command){
 /*
 built-in shell commands: cd, exit, pwd, which 
 */
-int builtin_commands (char **tokens, int *status){
+int builtin_commands (char **tokens, int *status, int free_tokens){
     if (strcmp(tokens[0], "exit") == 0) {
-        printf("mysh: exiting");
-        printf("\n");
+        printf("mysh: exiting\n"); 
+        if (free_tokens){
+            free_expanded_tokens(tokens);
+        }
         exit(0); // Exit the shell
     } else if (strcmp(tokens[0], "cd") == 0) {
         if (tokens[1] == NULL || tokens[2] != NULL) {
@@ -450,11 +467,22 @@ int builtin_commands (char **tokens, int *status){
                 *status = 1;
             }
         }
-        return 1;
+        //return 1;
+    } else {
+        return 0; // Not a built-in command
     }
-    return 0; 
-}
 
+    // Free tokens after executing built-in commands
+    if (free_tokens) {
+        for (int i = 0; tokens[i] != NULL; i++) {
+            fprintf(stderr, "Freeing token: %s\n", tokens[i]);
+            free(tokens[i]);
+        }
+        free(tokens);
+    }
+
+    return 0;
+}
 
 /*
 executes a pipeline of 2 commands that are connected using | 
@@ -541,10 +569,5 @@ void execute_pipe_commands (char **first_command, char **second_command){
     close(pipe_fds[1]);
     waitpid(first_pid, NULL, 0);
     waitpid(second_pid, NULL, 0);
-
-    for (int i = 0; first_command[i] != NULL; i++) free(first_command[i]);
-    free(first_command);
-
-    for (int i = 0; second_command[i] != NULL; i++) free(second_command[i]);
-    free(second_command);
 }
+
