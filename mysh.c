@@ -9,7 +9,6 @@
 #include <ctype.h>
 
 #define MAX_ARGS 512
-
 #define MAX_COMMAND_LENGTH 2048
 int status = 0;
 
@@ -210,6 +209,13 @@ void exec_command(char *input, int *status) {
         char *second_comm = pipe + 1;
 
         execute_pipe_commands(parse_command(first_comm), parse_command(second_comm));
+
+        // for (int i = 0; first_tokens[i] != NULL; i++) free(first_tokens[i]);
+        // free(first_tokens);
+
+        // for (int i = 0; second_tokens[i] != NULL; i++) free(second_tokens[i]);
+        // free(second_tokens);
+
         return;
     }
 
@@ -243,13 +249,16 @@ void exec_command(char *input, int *status) {
         for (int i = 0; tokens[i] != NULL; i++) free(tokens[i]);
         free(tokens);
         return;
+    } else {
+        redirection(&cmd);
     }
     
-    redirection(&cmd);
+    //redirection(&cmd);
     
     free(cmd.execpath);
     free(cmd.inputfile);
     free(cmd.outputfile);
+
     for (int i = 0; tokens[i] != NULL; i++) free(tokens[i]);
     free(tokens);
 }
@@ -470,4 +479,10 @@ void execute_pipe_commands (char **first_command, char **second_command){
     close(pipe_fds[1]);
     waitpid(first_pid, NULL, 0);
     waitpid(second_pid, NULL, 0);
+
+    for (int i = 0; first_command[i] != NULL; i++) free(first_command[i]);
+    free(first_command);
+
+    for (int i = 0; second_command[i] != NULL; i++) free(second_command[i]);
+    free(second_command);
 }
