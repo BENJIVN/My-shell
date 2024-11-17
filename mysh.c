@@ -33,6 +33,10 @@ void execute_pipe_commands(char **first_command, char **second_command);
 void redirection(command *cmd);
 int builtin_commands(char **tokens, int *status_flag);
 
+/*
+determine if the shell is running in batch or interactive mode 
+reads commands from stdin or a file in batch mode and executes them using exec_command
+*/
 int main (int argc, char *argv[]){
     int interactive = isatty(STDIN_FILENO); //check stdin is connected to terminal 
     char command[MAX_COMMAND_LENGTH];
@@ -121,6 +125,13 @@ int main (int argc, char *argv[]){
     }
 }
 
+/*
+parses a given command into tokens for exec 
+splits the command string into tokens 
+allocates memory for tokens 
+--> wildcard_expansion to handle * expansions in the tokens 
+returns an array of tokens 
+*/
 char **parse_command(char *command){
     int token_count = 0;
     char **tokens = malloc(MAX_ARGS * sizeof(char *));
@@ -133,7 +144,7 @@ char **parse_command(char *command){
     }
 
     while (*next_token != '\0'){
-        //shsip whitespace 
+        //skip whitespace 
         while (isspace(*next_token)) next_token++;
             if(*next_token == '\0') break;
         
@@ -159,14 +170,20 @@ char **parse_command(char *command){
     tokens[token_count] = NULL;
 
     //debug tokens
-    for (int i = 0; i < token_count; i++) {
-        fprintf(stderr, "parse_command Debug: Token %d: %s\n", i, tokens[i]);
-    }
+    // for (int i = 0; i < token_count; i++) {
+    //     fprintf(stderr, "parse_command Debug: Token %d: %s\n", i, tokens[i]);
+    // }
 
     wildcard_expansion(&tokens, &token_count);
     return tokens;
 }
 
+/*
+expands tokens that have * 
+iterates through each token 
+if a token contains a wildcard, uses glob function to find matching file names
+replaces the token with the list of the file names that correspond to the *...
+*/
 void wildcard_expansion(char ***tokens, int *token_count) {
     char **expanded_tokens = malloc(MAX_ARGS * sizeof(char *));
     if (!expanded_tokens) {
@@ -180,9 +197,17 @@ void wildcard_expansion(char ***tokens, int *token_count) {
         if (strchr((*tokens)[i], '*')) {
             glob_t glob_result;
             if (glob((*tokens)[i], 0, NULL, &glob_result) == 0) {
+                //fprintf(stderr, "Wildcard Expansion: %s ->", (*tokens)[i]);
                 for (size_t j = 0; j < glob_result.gl_pathc; j++) {
                     expanded_tokens[new_token_count++] = strdup(glob_result.gl_pathv[j]);
                 }
+
+                //fprintf(stderr, "Wildcard Expansion: %s ->", (*tokens)[i]);
+                // for (size_t j = 0; j < glob_result.gl_pathc; j++) {
+                //     fprintf(stderr, " %s", glob_result.gl_pathv[j]);
+                // }
+
+                fprintf(stderr, "\n");
                 globfree(&glob_result);
             } else {
                 expanded_tokens[new_token_count++] = strdup((*tokens)[i]);
@@ -200,6 +225,14 @@ void wildcard_expansion(char ***tokens, int *token_count) {
     *token_count = new_token_count;
 }
 
+/*
+executes a single command / pipeline 
+parses the command string into tokens using parse
+checks if the command is a built-in command 
+handles input and output redirection (< , >)
+if the command is not built in we find its path using path_finder 
+also remove the redirection from the arguments array 
+*/
 void exec_command(char *input, int *status) {
     //we need to handle the pipe as well
     char *pipe = strchr(input, '|');
@@ -234,14 +267,16 @@ void exec_command(char *input, int *status) {
     command cmd = { .arguments = tokens, .execpath = NULL, .inputfile = NULL, .outputfile = NULL };
 
     for (int i = 0; tokens[i] != NULL; i++) {
-        if (strcmp(tokens[i], "<") == 0 && tokens[i+1] != NULL) {
-            cmd.inputfile = strdup(tokens[++i]);
-        } else if (strcmp(tokens[i], ">") == 0 && tokens[i+1] != NULL) {
-            cmd.outputfile = strdup(tokens[++i]);
-        } else if (cmd.execpath == NULL) {
-            cmd.execpath = path_finder(tokens[0]);
-        }
+    if (strcmp(tokens[i], "<") == 0 && tokens[i + 1] != NULL) {
+        cmd.inputfile = strdup(tokens[++i]);  
+        tokens[i - 1] = NULL;                
+    } else if (strcmp(tokens[i], ">") == 0 && tokens[i + 1] != NULL) {
+        cmd.outputfile = strdup(tokens[++i]);  
+        tokens[i - 1] = NULL;                  
+    } else if (cmd.execpath == NULL) {
+        cmd.execpath = path_finder(tokens[0]);
     }
+}
 
     if (!cmd.execpath) {
         fprintf(stderr, "Command not found: %s\n", tokens[0]);
@@ -259,10 +294,20 @@ void exec_command(char *input, int *status) {
     free(cmd.inputfile);
     free(cmd.outputfile);
 
-    for (int i = 0; tokens[i] != NULL; i++) free(tokens[i]);
+    for (int i = 0; tokens[i] != NULL; i++) {
+        free(tokens[i]);
+    }
+
     free(tokens);
 }
 
+/*
+input/output redirection 
+forks a child process to execute the command 
+in the child process: set up input redirection if an input file is specified same with output redirection
+executes the command using execv 
+parent: waits forr child process to finish 
+*/
 void redirection(command *cmd) {
     pid_t pid = fork();
     if (pid == 0) { // child process
@@ -300,12 +345,12 @@ void redirection(command *cmd) {
         execv(cmd->execpath, cmd->arguments);
         perror("execv failed");
         exit(EXIT_FAILURE);
-    } else if (pid > 0) { // Parent process
+    } else if (pid > 0) { //parent 
         int wstatus;
         waitpid(pid, &wstatus, 0);
 
         //check status of child process
-        if (WIFEXITED(wstatus)) { //if child process is terminated
+        if (WIFEXITED(wstatus)) { 
             int exit_code = WEXITSTATUS(wstatus);
             if (exit_code != 0) {
                 fprintf(stderr, "mysh: Command failed with code %d\n", exit_code);
@@ -319,8 +364,13 @@ void redirection(command *cmd) {
     }
 }
 
+/*
+finds the path of an command that is not built in 
+checks if the command contains a /
+checks directories in the PATH env 
+*/
 char *path_finder(const char *command){
-    //fprintf(stderr, "Debug: Checking path for command: %s\n", command);
+    //fprintf(stderr, "debug: %s\n", command);
     char *path_env = getenv("PATH");
     if (path_env == NULL) {
         perror("PATH environment variable not found");
@@ -343,6 +393,9 @@ char *path_finder(const char *command){
     return NULL;
 }
 
+/*
+built-in shell commands: cd, exit, pwd, which 
+*/
 int builtin_commands (char **tokens, int *status){
     if (strcmp(tokens[0], "exit") == 0) {
         printf("mysh: exiting");
@@ -399,9 +452,17 @@ int builtin_commands (char **tokens, int *status){
         }
         return 1;
     }
-    return 0; // Not a built-in command
+    return 0; 
 }
 
+
+/*
+executes a pipeline of 2 commands that are connected using | 
+forks 2 child processes 
+1st process writes to the pipe
+2nd process reads from the pipe 
+execv is used in the child process 
+*/
 void execute_pipe_commands (char **first_command, char **second_command){
    int pipe_fds[2];
     if (pipe(pipe_fds) == -1) {
@@ -411,7 +472,7 @@ void execute_pipe_commands (char **first_command, char **second_command){
 
     pid_t first_pid = fork();
     if (first_pid == 0) {
-        // First child: write to pipe
+        //write to pipe
         dup2(pipe_fds[1], STDOUT_FILENO);
         close(pipe_fds[0]);
         close(pipe_fds[1]);
@@ -426,25 +487,24 @@ void execute_pipe_commands (char **first_command, char **second_command){
                 break;
             }
         }
-
         if (cmd1.inputfile) {
             int fd_in = open(cmd1.inputfile, O_RDONLY);
             if (fd_in == -1) {
                 perror("Failed to open input file");
+                //free(cmd1.inputfile); 
                 exit(EXIT_FAILURE);
             }
             dup2(fd_in, STDIN_FILENO);
             close(fd_in);
         }
-
         execv(cmd1.execpath, cmd1.arguments);
         perror("execv failed for first command");
+        //free(cmd1.inputfile);
         exit(EXIT_FAILURE);
     }
-
     pid_t second_pid = fork();
     if (second_pid == 0) {
-        // Second child: read from pipe
+        //read from pipe
         dup2(pipe_fds[0], STDIN_FILENO);
         close(pipe_fds[1]);
         close(pipe_fds[0]);
@@ -464,6 +524,7 @@ void execute_pipe_commands (char **first_command, char **second_command){
             int fd_out = open(cmd2.outputfile, O_WRONLY | O_CREAT | O_TRUNC, 0640);
             if (fd_out == -1) {
                 perror("Failed to open output file");
+                //free(cmd2.outputfile);
                 exit(EXIT_FAILURE);
             }
             dup2(fd_out, STDOUT_FILENO);
@@ -472,6 +533,7 @@ void execute_pipe_commands (char **first_command, char **second_command){
 
         execv(cmd2.execpath, cmd2.arguments);
         perror("execv failed for second command");
+        //free(cmd2.outputfile);
         exit(EXIT_FAILURE);
     }
 

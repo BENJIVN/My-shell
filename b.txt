@@ -1,2 +1,2 @@
 in outmost b file 
-eecho b_text
+echo b_text

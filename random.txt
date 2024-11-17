@@ -1,0 +1,12 @@
+myscript.sh
+subdir
+list_cwd.txt
+e
+b.txt
+Makefile
+mysh
+a.txt
+ReadMe
+d
+mysh.c
+c.txt

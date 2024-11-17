@@ -1,4 +1,4 @@
-cat ls_cwd.txt | sort > ls_cwd_sorted.txt
+cat random.txt | sort > random_sorted.txt
 cat < inputfile.txt | sort > inputfile_sorted.txt
 cat nonexistingfile.txt | grep "text" > output.txt
 cat < inputfile.txt | grep *.txt > out.txt
