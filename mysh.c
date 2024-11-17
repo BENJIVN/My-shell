@@ -8,7 +8,8 @@
 #include <sys/stat.h>
 #include <ctype.h>
 
-#define MAX_ARGS 1024
+#define MAX_ARGS 512
+
 #define MAX_COMMAND_LENGTH 2048
 int status = 0;
 
@@ -133,13 +134,16 @@ char **parse_command(char *command){
     }
 
     while (*next_token != '\0'){
+        //shsip whitespace 
         while (isspace(*next_token)) next_token++;
             if(*next_token == '\0') break;
         
+        //special tokens 
         if (*next_token == '>' || *next_token == '<' || *next_token == '|' ){
             tokens[token_count++] = strndup(next_token,1);
             next_token++;
         } else {
+            //parse nonspecial tokens 
             end_token = next_token;
             while (!isspace(*end_token) && *end_token != '\0' && *end_token != '>' && *end_token != '<' && *end_token != '|') end_token++;
             tokens[token_count++] = strndup(next_token, end_token - next_token);
@@ -156,9 +160,9 @@ char **parse_command(char *command){
     tokens[token_count] = NULL;
 
     //debug tokens
-    // for (int i = 0; i < token_count; i++) {
-    //     fprintf(stderr, "parse_command Debug: Token %d: %s\n", i, tokens[i]);
-    // }
+    for (int i = 0; i < token_count; i++) {
+        fprintf(stderr, "parse_command Debug: Token %d: %s\n", i, tokens[i]);
+    }
 
     wildcard_expansion(&tokens, &token_count);
     return tokens;
@@ -166,6 +170,11 @@ char **parse_command(char *command){
 
 void wildcard_expansion(char ***tokens, int *token_count) {
     char **expanded_tokens = malloc(MAX_ARGS * sizeof(char *));
+    if (!expanded_tokens) {
+        perror("Failed to allocate memory for wildcard expansion");
+        exit(EXIT_FAILURE);
+    }
+
     int new_token_count = 0;
 
     for (int i = 0; i < *token_count; i++) {
@@ -176,21 +185,36 @@ void wildcard_expansion(char ***tokens, int *token_count) {
                     expanded_tokens[new_token_count++] = strdup(glob_result.gl_pathv[j]);
                 }
                 globfree(&glob_result);
+            } else {
+                expanded_tokens[new_token_count++] = strdup((*tokens)[i]);
             }
         } else {
             expanded_tokens[new_token_count++] = strdup((*tokens)[i]);
         }
+        free((*tokens)[i]);
     }
-    expanded_tokens[new_token_count] = NULL;
-    for (int i = 0; i < *token_count; i++) free((*tokens)[i]);
+
     free(*tokens);
+
+    expanded_tokens[new_token_count] = NULL;
     *tokens = expanded_tokens;
     *token_count = new_token_count;
 }
 
 void exec_command(char *input, int *status) {
+    //we need to handle the pipe as well
+    char *pipe = strchr(input, '|');
+    if (pipe){
+        *pipe = '\0';
+        char *first_comm = input;
+        char *second_comm = pipe + 1;
+
+        execute_pipe_commands(parse_command(first_comm), parse_command(second_comm));
+        return;
+    }
+
     char **tokens = parse_command(input);
-    if (tokens[0] == NULL) {
+    if (!tokens || tokens[0] == NULL) {
         free(tokens);
         return;
     }
@@ -233,13 +257,20 @@ void exec_command(char *input, int *status) {
 void redirection(command *cmd) {
     pid_t pid = fork();
     if (pid == 0) { // child process
+        //input redirection
         if (cmd->inputfile) {
             int fd_in = open(cmd->inputfile, O_RDONLY);
             if (fd_in == -1) {
                 perror("Failed to open input file");
                 exit(EXIT_FAILURE);
             }
-            dup2(fd_in, STDIN_FILENO);
+            // dup2(fd_in, STDIN_FILENO);
+            // close(fd_in);
+            if (dup2(fd_in, STDIN_FILENO) == -1) {
+                perror("Failed to redirect input");
+                close(fd_in);
+                exit(EXIT_FAILURE);
+            }
             close(fd_in);
         }
         if (cmd->outputfile) {
@@ -248,9 +279,15 @@ void redirection(command *cmd) {
                 perror("Failed to open output file");
                 exit(EXIT_FAILURE);
             }
-            dup2(fd_out, STDOUT_FILENO);
+            // 
+            if (dup2(fd_out, STDOUT_FILENO) == -1) {
+                perror("Failed to redirect output");
+                close(fd_out);
+                exit(EXIT_FAILURE);
+            }
             close(fd_out);
         }
+        
         execv(cmd->execpath, cmd->arguments);
         perror("execv failed");
         exit(EXIT_FAILURE);
@@ -314,19 +351,28 @@ int builtin_commands (char **tokens, int *status){
         }
         return 1;
     } else if (strcmp(tokens[0], "pwd") == 0) {
-        if (tokens[1] != NULL) {
-            fprintf(stderr, "pwd: too many arguments\n");
-            *status = 1;
+        char cwd[MAX_COMMAND_LENGTH];
+        if (getcwd(cwd, sizeof(cwd)) != NULL) {
+            printf("%s\n", cwd);
+            *status = 0;
         } else {
-            char cwd[MAX_COMMAND_LENGTH];
-            if (getcwd(cwd, sizeof(cwd)) != NULL) {
-                printf("%s\n", cwd);
-                *status = 0;
-            } else {
-                perror("pwd failed");
-                *status = 1;
-            }
+            perror("pwd failed");
+            *status = 1;
         }
+        return 1;
+        // if (tokens[1] != NULL) {
+        //     fprintf(stderr, "pwd: too many arguments\n");
+        //     *status = 1;
+        // } else {
+        //     char cwd[MAX_COMMAND_LENGTH];
+        //     if (getcwd(cwd, sizeof(cwd)) != NULL) {
+        //         printf("%s\n", cwd);
+        //         *status = 0;
+        //     } else {
+        //         perror("pwd failed");
+        //         *status = 1;
+        //     }
+        // }
         return 1;
     } else if (strcmp(tokens[0], "which") == 0) {
         if (tokens[1] == NULL || tokens[2] != NULL) {
@@ -348,7 +394,7 @@ int builtin_commands (char **tokens, int *status){
 }
 
 void execute_pipe_commands (char **first_command, char **second_command){
-    int pipe_fds[2];
+   int pipe_fds[2];
     if (pipe(pipe_fds) == -1) {
         perror("pipe");
         exit(EXIT_FAILURE);
@@ -356,37 +402,70 @@ void execute_pipe_commands (char **first_command, char **second_command){
 
     pid_t first_pid = fork();
     if (first_pid == 0) {
-        // First child --> execute the first command
-        dup2(pipe_fds[1], STDOUT_FILENO); 
+        // First child: write to pipe
+        dup2(pipe_fds[1], STDOUT_FILENO);
         close(pipe_fds[0]);
         close(pipe_fds[1]);
 
-        command command1;
-        command1.arguments = first_command;
-        command1.execpath = path_finder(first_command[0]);
-        if (command1.execpath) {
-            execv(command1.execpath, command1.arguments);
-            perror("execv failed for first command");
+        command cmd1 = { .arguments = first_command, .execpath = path_finder(first_command[0]), .inputfile = NULL, .outputfile = NULL };
+
+        // Check for input redirection in first command
+        for (int i = 0; first_command[i] != NULL; i++) {
+            if (strcmp(first_command[i], "<") == 0 && first_command[i + 1] != NULL) {
+                cmd1.inputfile = strdup(first_command[++i]);
+                first_command[i - 1] = NULL;
+                break;
+            }
         }
+
+        if (cmd1.inputfile) {
+            int fd_in = open(cmd1.inputfile, O_RDONLY);
+            if (fd_in == -1) {
+                perror("Failed to open input file");
+                exit(EXIT_FAILURE);
+            }
+            dup2(fd_in, STDIN_FILENO);
+            close(fd_in);
+        }
+
+        execv(cmd1.execpath, cmd1.arguments);
+        perror("execv failed for first command");
         exit(EXIT_FAILURE);
     }
 
     pid_t second_pid = fork();
     if (second_pid == 0) {
-        // Second child: execute the second command
+        // Second child: read from pipe
         dup2(pipe_fds[0], STDIN_FILENO);
         close(pipe_fds[1]);
         close(pipe_fds[0]);
-        command command2;
-        command2.arguments = second_command;
-        command2.execpath = path_finder(second_command[0]);
-        if (command2.execpath) {
-            execv(command2.execpath, command2.arguments);
-            perror("execv failed for second command");
+
+        command cmd2 = { .arguments = second_command, .execpath = path_finder(second_command[0]), .inputfile = NULL, .outputfile = NULL };
+
+        // Check for output redirection in second command
+        for (int i = 0; second_command[i] != NULL; i++) {
+            if (strcmp(second_command[i], ">") == 0 && second_command[i + 1] != NULL) {
+                cmd2.outputfile = strdup(second_command[++i]);
+                second_command[i - 1] = NULL;
+                break;
+            }
         }
+
+        if (cmd2.outputfile) {
+            int fd_out = open(cmd2.outputfile, O_WRONLY | O_CREAT | O_TRUNC, 0640);
+            if (fd_out == -1) {
+                perror("Failed to open output file");
+                exit(EXIT_FAILURE);
+            }
+            dup2(fd_out, STDOUT_FILENO);
+            close(fd_out);
+        }
+
+        execv(cmd2.execpath, cmd2.arguments);
+        perror("execv failed for second command");
         exit(EXIT_FAILURE);
     }
-    // Parent process closes pipes and waits for children
+
     close(pipe_fds[0]);
     close(pipe_fds[1]);
     waitpid(first_pid, NULL, 0);
