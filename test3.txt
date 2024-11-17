@@ -3,4 +3,4 @@ ls *.txt | sort > sort.txt
 ls *.txt | wc -l
 ls | grep *.txt > txtfile.txt
 cat *.txt > combined.txt
-ls dir*/*.txt
+ls subdir/*.txt
