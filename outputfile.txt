@@ -1,0 +1,14 @@
+content from input file
+g
+a
+g
+d
+h
+b
+c
+4
+2
+1
+t1.txt
+t3.txt
+t5.txt
