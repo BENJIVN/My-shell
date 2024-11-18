@@ -20,7 +20,7 @@ typedef struct {
 } command;
 
 //function prototypes!!!
-//tokenizer layer
+//tokenizer layer / parsing 
 char **tokenizer(char *command);
 void wildcard_expansion(char ***tokens, int *token_count);
 
@@ -155,19 +155,21 @@ char **tokenizer(char *command){
         if (*next_token == '>' || *next_token == '<' || *next_token == '|') {
             if (token_count >= MAX_ARGS - 1) {
                 fprintf(stderr, "Too many arguments\n");
-                for (int i = 0; i < token_count; i++) {
-                    free(tokens[i]);
-                }
-                free(tokens);
+                // for (int i = 0; i < token_count; i++) {
+                //     free(tokens[i]);
+                // }
+                // free(tokens);
+                free_expanded_tokens(tokens);
                 exit(EXIT_FAILURE);
             }
             tokens[token_count] = strndup(next_token, 1);
             if (!tokens[token_count]) {
                 perror("Memory allocation failed");
-                for (int i = 0; i < token_count; i++) {
-                    free(tokens[i]);
-                }
-                free(tokens);
+                // for (int i = 0; i < token_count; i++) {
+                //     free(tokens[i]);
+                // }
+                // free(tokens);
+                free_expanded_tokens(tokens);
                 exit(EXIT_FAILURE);
             }
             //free(tokens);
@@ -186,19 +188,21 @@ char **tokenizer(char *command){
 
             if (token_count >= MAX_ARGS - 1) {
                 fprintf(stderr, "Too many arguments\n");
-                for (int i = 0; i < token_count; i++) {
-                    free(tokens[i]);
-                }
-                free(*tokens);
+                // for (int i = 0; i < token_count; i++) {
+                //     free(tokens[i]);
+                // }
+                // free(*tokens);
+                free_expanded_tokens(tokens);
                 exit(EXIT_FAILURE);
             }
             tokens[token_count] = strndup(next_token, end_token - next_token);
             if (!tokens[token_count]) {
                 perror("Memory allocation failed");
-                for (int i = 0; i < token_count; i++) {
-                    free(tokens[i]);
-                }
-                free(*tokens);
+                // for (int i = 0; i < token_count; i++) {
+                //     free(tokens[i]);
+                // }
+                // free(*tokens);
+                free_expanded_tokens(tokens);
                 exit(EXIT_FAILURE);
             }
             token_count++;
@@ -215,15 +219,8 @@ char **tokenizer(char *command){
         printf("Token[%d]: %s\n", i, tokens[i]);
     }
 
-    // Perform wildcard expansion only if a wildcard is present
     if (has_wildcard) {
         wildcard_expansion(&tokens, &token_count);
-
-        // Print tokens after wildcard expansion for debugging
-        printf("Tokens after wildcard expansion:\n");
-        for (int i = 0; tokens[i] != NULL; i++) {
-            printf("Token[%d]: %s\n", i, tokens[i]);
-        }
     }
 
     return tokens;
@@ -231,7 +228,7 @@ char **tokenizer(char *command){
 
 
 /*
-expands tokens that have * 
+expands tokens that have '*' 
 iterates through each token 
 if a token contains a wildcard, uses glob function to find matching file names
 replaces the token with the list of the file names that correspond to the *...
@@ -324,7 +321,6 @@ if the command is not built in we find its path using path_finder
 also remove the redirection from the arguments array 
 */
 void exec_command(char *input, int *status) {
-    //we need to handle the pipe as well
     char *pipe = strchr(input, '|');
     if (pipe) {
         printf("piping\n");
@@ -336,12 +332,6 @@ void exec_command(char *input, int *status) {
         char **second_tokens = tokenizer(second_comm);
 
         execute_pipe_commands(first_tokens, second_tokens);
-
-        // for (int i = 0; first_tokens[i] != NULL; i++) free(first_tokens[i]);
-        // free(first_tokens);
-
-        // for (int i = 0; second_tokens[i] != NULL; i++) free(second_tokens[i]);
-        // free(second_tokens);
 
         free_expanded_tokens(first_tokens);
         free_expanded_tokens(second_tokens);
@@ -365,9 +355,13 @@ void exec_command(char *input, int *status) {
     for (int i = 0; tokens[i] != NULL; i++) {
         if (strcmp(tokens[i], "<") == 0 && tokens[i + 1] != NULL) {
             cmd.inputfile = strdup(tokens[++i]);  
+            free(tokens[i - 1]);  
+            free(tokens[i]);
             tokens[i - 1] = NULL;                
         } else if (strcmp(tokens[i], ">") == 0 && tokens[i + 1] != NULL) {
-            cmd.outputfile = strdup(tokens[++i]);  
+            cmd.outputfile = strdup(tokens[++i]); 
+            free(tokens[i - 1]);  
+            free(tokens[i]); 
             tokens[i - 1] = NULL;                  
         } else if (cmd.execpath == NULL) {
             cmd.execpath = path_finder(tokens[0]);
@@ -393,15 +387,15 @@ void exec_command(char *input, int *status) {
 
 void free_commands(command *cmd){
     if (cmd->execpath) {
-        //fprintf(stderr, "Debug: Freeing execpath '%s'\n", cmd->execpath);
+        //fprintf(stderr, "debug: freeing execpath '%s'\n", cmd->execpath);
         free(cmd->execpath);
     }
     if (cmd->inputfile) {
-        //fprintf(stderr, "Debug: Freeing inputfile '%s'\n", cmd->inputfile);
+        //fprintf(stderr, "debug Freeing inputfile '%s'\n", cmd->inputfile);
         free(cmd->inputfile);
     }
     if (cmd->outputfile) {
-        //fprintf(stderr, "Debug: Freeing outputfile '%s'\n", cmd->outputfile);
+        //fprintf(stderr, "debug: freeing outputfile '%s'\n", cmd->outputfile);
         free(cmd->outputfile);
     }
 }
