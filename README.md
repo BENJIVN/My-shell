@@ -7,6 +7,22 @@ Victor Nguyen: vvn12
 
 The shell focuses on ensuring functionality, proper error handling, and memory safety (leaks) across the program. Commands were tested in both interactive and batch modes. 
 
+Running the program:
+```
+make clean
+make
+```
+
+To entire batch mode: 
+
+```
+./mysh _____
+```
+
+To entire interactive mode:
+```
+./mysh 
+```
 ### Function prototypes:
 ```
 //tokenizer layer / parsing 
@@ -87,7 +103,7 @@ cat *.txt > combined_3.txt
 ls subdir*/*.txt
 ```
 
-## REIDRECION AND PIPING test4.txt\
+## REIDRECION AND PIPING test4.txt
 
 Test for of redirection, piping and wildcard expansion. The first command reads random.txt and pipes it through sort and writes the output to random_sorted_4.txt. The second command redirects inputfile.txt as input for cat and pipes the output through sort and writes the result into inputfile_sorted_4.txt. 3rd command reads a nonexistent file for error handling and pipes the output to grep to search for "text" and writes the output to output_4.txt. the last command redirects inputfile.txt to cat and pipes the output to grep using a wilcard pattern (*.txt) and writes the result to out_4.txt, a combination of everything. 
 
