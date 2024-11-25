@@ -25,14 +25,14 @@ char **tokenizer(char *command);
 void wildcard_expansion(char ***tokens, int *token_count);
 
 //command parser layer
-void exec_command(char *command, int *status_flag);
+void exec_command(char *command, int *status_indicator);
 void free_commands(command *cmd);
 char *path_finder(const char *command);
 
 //executor layer
 void execute_pipe_commands(char **first_command, char **second_command);
 void redirection(command *cmd);
-int builtin_commands(char **tokens, int *status_flag, int free_tokens);
+int builtin_commands(char **tokens, int *status_indicator, int free_tokens);
 void free_expanded_tokens(char **tokens);
 /*
 determine if the shell is running in batch or interactive mode 
@@ -76,12 +76,15 @@ int main (int argc, char *argv[]){
                 }
 
                 if (strlen(next_comm) > 0) {
+                    printf("processing command: %s\n", next_comm);
                     exec_command(next_comm, &status);
                 }
 
                 //move to next line if not null, end loop if no new lines
                 next_comm = newLine ? newLine + 1 : NULL;
             }
+
+            memset(command, 0, MAX_COMMAND_LENGTH);
         }
 
         if (bytes_read == -1) { 
@@ -108,7 +111,7 @@ int main (int argc, char *argv[]){
                 }
 
                 if (strlen(next_comm) > 0){ 
-                     exec_command(command, &status);
+                     exec_command(next_comm, &status);
                 }
 
                 if (newLine){
@@ -214,10 +217,10 @@ char **tokenizer(char *command){
     tokens[token_count] = NULL;
 
     // Print tokens for debugging
-    printf("Tokens after parsing:\n");
-    for (int i = 0; tokens[i] != NULL; i++) {
-        printf("Token[%d]: %s\n", i, tokens[i]);
-    }
+    // printf("Tokens after parsing:\n");
+    // for (int i = 0; tokens[i] != NULL; i++) {
+    //     printf("Token[%d]: %s\n", i, tokens[i]);
+    // }
 
     if (has_wildcard) {
         wildcard_expansion(&tokens, &token_count);
@@ -323,7 +326,7 @@ also remove the redirection from the arguments array
 void exec_command(char *input, int *status) {
     char *pipe = strchr(input, '|');
     if (pipe) {
-        printf("piping\n");
+        //printf("piping\n");
         *pipe = '\0';
         char *first_comm = input;
         char *second_comm = pipe + 1;
@@ -455,7 +458,7 @@ void redirection(command *cmd) {
         if (WIFEXITED(wstatus)) { 
             int exit_code = WEXITSTATUS(wstatus);
             if (exit_code != 0) {
-                fprintf(stderr, "mysh: Command failed with code %d\n", exit_code);
+                fprintf(stderr, "mysh: Command Failed: code %d\n", exit_code);
             }
         } else if (WIFSIGNALED(wstatus)) {
             fprintf(stderr, "mysh: Terminated by signal %d\n", WTERMSIG(wstatus));

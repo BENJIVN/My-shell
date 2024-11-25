@@ -1,4 +1,4 @@
-cat random.txt | sort > random_sorted.txt
-cat < inputfile.txt | sort > inputfile_sorted.txt
-cat nonexistingfile.txt | grep "text" > output.txt
-cat < inputfile.txt | grep *.txt > out.txt
+cat random.txt | sort > random_sorted_4.txt
+cat < inputfile.txt | sort > inputfile_sorted_4.txt
+cat DNE.txt | grep "text" > output_4.txt
+cat < inputfile.txt | grep *.txt > out_4.txt

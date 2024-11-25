@@ -1,6 +1,6 @@
 ls *.txt
-ls *.txt | sort > sort.txt
+ls *.txt | sort > sort_3.txt
 ls *.txt | wc -l
-ls | grep *.txt > txtfile.txt
-cat *.txt > combined.txt
+ls | grep *.txt > txtfile_3.txt
+cat *.txt > combined_3.txt
 ls subdir/*.txt
